@@ -3,6 +3,9 @@
 
 module Task1 where
 
+import Text.Read (readMaybe)
+import Data.Maybe()
+
 -- * Expression data type
 
 -- | Representation of integer arithmetic expressions comprising
@@ -12,7 +15,7 @@ data IExpr =
     Lit Integer
   | Add IExpr IExpr
   | Mul IExpr IExpr
-  deriving Show
+  deriving (Show, Eq)
 
 -- * Evaluation
 
@@ -28,7 +31,9 @@ data IExpr =
 -- 9
 --
 evalIExpr :: IExpr -> Integer
-evalIExpr = error "TODO: define evalIExpr"
+evalIExpr (Lit n)   = n
+evalIExpr (Add e1 e2) = evalIExpr e1 + evalIExpr e2
+evalIExpr (Mul e1 e2) = evalIExpr e1 * evalIExpr e2
 
 -- * Parsing
 
@@ -37,6 +42,21 @@ class Parse a where
   -- | Parses value 'a' from given string
   -- wrapped in 'Maybe' with 'Nothing' indicating failure to parse
   parse :: String -> Maybe a
+
+-- | Helper function to process RPN tokens using a stack
+processTokenIExpr :: Maybe [IExpr] -> String -> Maybe [IExpr]
+processTokenIExpr Nothing _ = Nothing
+processTokenIExpr (Just stack) token =
+  case token of
+    "+" -> case stack of
+             (e1:e2:rest) -> Just (Add e2 e1 : rest) 
+             _            -> Nothing 
+    "*" -> case stack of
+             (e1:e2:rest) -> Just (Mul e2 e1 : rest) 
+             _            -> Nothing
+    _   -> case readMaybe token :: Maybe Integer of
+             Just n  -> Just (Lit n : stack)
+             Nothing -> Nothing
 
 -- | Parses given expression in Reverse Polish Notation
 -- wrapped in 'Maybe' with 'Nothing' indicating failure to parse
@@ -55,7 +75,12 @@ class Parse a where
 -- Nothing
 --
 instance Parse IExpr where
-  parse = error "TODO: define parse (Parse IExpr)"
+  parse s = case foldl processTokenIExpr (Just []) (words s) of
+              Just [result] -> Just result
+              _             -> Nothing
+
+instance Parse Integer where
+  parse = readMaybe
 
 -- * Evaluation with parsing
 
@@ -77,4 +102,4 @@ instance Parse IExpr where
 -- Nothing
 --
 evaluateIExpr :: String -> Maybe Integer
-evaluateIExpr = error "TODO: define evaluateIExpr"
+evaluateIExpr s = evalIExpr <$> (parse s :: Maybe IExpr)

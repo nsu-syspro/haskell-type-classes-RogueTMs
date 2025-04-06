@@ -2,10 +2,13 @@
 -- The above pragma enables all warnings
 
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Task2 where
 
 import Task1 (Parse, Parse(..))
+import Control.Applicative (liftA2)
 
 -- * Expression data type
 
@@ -17,13 +20,35 @@ data Expr a op =
     Lit a
   | Var String
   | BinOp op (Expr a op) (Expr a op)
-  deriving Show
+  deriving (Show, Eq)
 
 -- | Integer binary operations
 data IntOp = Add | Mul | Sub
-  deriving Show
+  deriving (Show, Eq)
 
 -- * Parsing
+
+-- | Define how to parse the specific integer operations
+instance Parse IntOp where
+  parse "+" = Just Add
+  parse "*" = Just Mul
+  parse "-" = Just Sub
+  parse _   = Nothing
+
+-- | Helper function to process a single token during RPN parsing.
+processTokenExpr :: forall a op. (Parse a, Parse op) => Maybe [Expr a op] -> String -> Maybe [Expr a op]
+processTokenExpr Nothing _ = Nothing
+processTokenExpr (Just stack) token =
+  case parse token :: Maybe op of
+    Just op ->
+      case stack of
+        (e1 : e2 : rest) -> Just (BinOp op e2 e1 : rest)
+        _                -> Nothing
+    Nothing ->
+      case parse token :: Maybe a of
+        Just val -> Just (Lit val : stack) 
+        Nothing  -> Just (Var token : stack)
+
 
 -- | Parses given expression in Reverse Polish Notation
 -- wrapped in 'Maybe' with 'Nothing' indicating failure to parse
@@ -42,7 +67,12 @@ data IntOp = Add | Mul | Sub
 -- Nothing
 --
 instance (Parse a, Parse op) => Parse (Expr a op) where
-  parse = error "TODO: define parse (Parse (Expr a op))"
+  parse s =
+    let tokens = words s
+        finalStackState = foldl processTokenExpr (Just []) tokens
+    in case finalStackState of
+         Just [result] -> Just result
+         _             -> Nothing
 
 -- * Evaluation
 
@@ -50,6 +80,12 @@ instance (Parse a, Parse op) => Parse (Expr a op) where
 class Eval a op where
   -- | Evaluates given binary operation with provided arguments
   evalBinOp :: op -> a -> a -> a
+
+-- | Instance of Eval for Integer domain and IntOp operations.
+instance Eval Integer IntOp where
+  evalBinOp Add = (+)
+  evalBinOp Mul = (*)
+  evalBinOp Sub = (-)
 
 -- | Evaluates given 'Expr' using given association list of variable values
 --
@@ -65,7 +101,14 @@ class Eval a op where
 -- Nothing
 --
 evalExpr :: (Eval a op) => [(String, a)] -> Expr a op -> Maybe a
-evalExpr = error "TODO: define evalExpr"
+evalExpr _ (Lit val) = Just val
+evalExpr varMap (Var name) = lookup name varMap
+evalExpr varMap (BinOp op e1 e2) =
+  let maybeVal1 = evalExpr varMap e1
+      maybeVal2 = evalExpr varMap e2
+  in
+     liftA2 (evalBinOp op) maybeVal1 maybeVal2
+
 
 -- | Parses given integer expression in Reverse Polish Notation and evaluates it
 -- using given association list of variable values
@@ -89,7 +132,7 @@ evalExpr = error "TODO: define evalExpr"
 -- Nothing
 --
 evaluateInteger :: [(String, Integer)] -> String -> Maybe Integer
-evaluateInteger = error "TODO: define evaluateInteger"
+evaluateInteger = evaluate reifyInteger
 
 -- | Parses given expression in Reverse Polish Notation and evaluates it
 -- using given association list of variable values
